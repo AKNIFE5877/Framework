@@ -1,7 +1,13 @@
 ManifestFileVersion: 0
-CRC: 217049592
+CRC: 3952528769
 AssetBundleManifest:
   AssetBundleInfos:
     Info_0:
-      Name: character.model
+      Name: shaders
+      Dependencies: {}
+    Info_1:
+      Name: sounds
+      Dependencies: {}
+    Info_2:
+      Name: attack
       Dependencies: {}
