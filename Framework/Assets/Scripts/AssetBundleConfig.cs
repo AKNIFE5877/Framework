@@ -8,6 +8,7 @@ public class AssetBundleConfig
 {
     [XmlElement("ABList")]
     public List<ABBase> ABList { get; set; }
+
 }
 [System.Serializable]
 public class ABBase

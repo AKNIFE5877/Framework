@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using System.IO;
+using System.Xml.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 
 public class BundleEditor
 {
@@ -18,13 +20,18 @@ public class BundleEditor
     //单个prefab的ab包
     public static Dictionary<string, List<string>> m_AllPrefabDir = new Dictionary<string, List<string>>();
 
+    //储存所有有效路径
+    private static List<string> m_ConfigFil = new List<string>();
+
     [MenuItem("Tools/打包")]
     public static void Build()
     {
         //BuildPipeline.BuildAssetBundles(Application.streamingAssetsPath, BuildAssetBundleOptions.ChunkBasedCompression, EditorUserBuildSettings.activeBuildTarget);
         //AssetDatabase.Refresh();
+        m_ConfigFil.Clear();
         m_AllFileDir.Clear();
         m_AllFileAB.Clear();
+        m_AllPrefabDir.Clear();
         ABConfig abconfig = AssetDatabase.LoadAssetAtPath<ABConfig>(ABCONFIGPATH);
         foreach (ABConfig.FileDirABName item in abconfig.m_AllFileDirAB)
         {
@@ -37,6 +44,7 @@ public class BundleEditor
             {
                 m_AllFileDir.Add(item.ABName, item.Path);
                 m_AllFileAB.Add(item.Path);
+                m_ConfigFil.Add(item.Path);
             }
         }
 
@@ -45,6 +53,7 @@ public class BundleEditor
         {
             string path = AssetDatabase.GUIDToAssetPath(allStr[i]);
             EditorUtility.DisplayProgressBar("查找Prefab", "Prefab:" + path, i * 1.0f / allStr.Length);
+            m_ConfigFil.Add(path);
             if (!ContainAllFileAB(path))
             {
                 GameObject obj = AssetDatabase.LoadAssetAtPath<GameObject>(path);
@@ -127,26 +136,82 @@ public class BundleEditor
                     continue;
                 }
                 Debug.Log("此AB包" + allBundle[i] + "包含文件：" + allBundlePath[j]);
-                resPathDic.Add(allBundlePath[j], allBundle[i]);
+                if (ValidPath(allBundlePath[j]))
+                {
+                    resPathDic.Add(allBundlePath[j], allBundle[i]);
+
+                }
             }
         }
         DeleteAB();
 
         //生成配置表
+        WriteData(resPathDic);
 
         BuildPipeline.BuildAssetBundles(m_BundleTargetPath, BuildAssetBundleOptions.ChunkBasedCompression, EditorUserBuildSettings.activeBuildTarget);
     }
 
-    static void WriteData(Dictionary<string,string> rePathDic)
+    static void WriteData(Dictionary<string, string> resPathDic)
     {
         AssetBundleConfig config = new AssetBundleConfig();
         config.ABList = new List<ABBase>();
-        foreach (string path in rePathDic.Keys)
+        foreach (string path in resPathDic.Keys)
         {
+            ABBase abBase = new ABBase();
+            abBase.Path = path;
+            abBase.Crc = CRC32.GetCRC32(path).ToString();
+            abBase.ABName = resPathDic[path];
+            abBase.AssetName = path.Remove(0, path.LastIndexOf("/") + 1);
+            abBase.ABDependce = new List<string>();
+            string[] resDependce = AssetDatabase.GetDependencies(path);
+            for (int i = 0; i < resDependce.Length; i++)
+            {
+                string tempPath = resDependce[i];
+                if (tempPath == path || path.EndsWith(".cs"))
+                {
+                    continue;
+                }
+                string abName = "";
+                if (resPathDic.TryGetValue(tempPath, out abName))
+                {
+                    if (abName == resPathDic[path])
+                    {
+                        continue;
+                    }
+                    if (!abBase.ABDependce.Contains(abName))
+                    {
+                        abBase.ABDependce.Add(abName);
+                    }
+                }
+            }
+            config.ABList.Add(abBase);
 
         }
 
         //写入xml
+        string xmlPath = Application.dataPath + "/AssetbundleConfig.xml";
+        if (File.Exists(xmlPath))
+        {
+            File.Delete(xmlPath);
+        }
+        FileStream fs = new FileStream(xmlPath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+        StreamWriter sw = new StreamWriter(fs, System.Text.Encoding.UTF8);
+        XmlSerializer xs = new XmlSerializer(config.GetType());
+        xs.Serialize(sw, config);
+        sw.Close();
+        fs.Close();
+
+
+        //写入二进制
+        foreach (ABBase abBase in config.ABList)
+        {
+            abBase.Path = "";
+        }
+        string bytePath = "Assets/GameData/Data/AssetBundleConfig.bytes";
+        FileStream fs1 = new FileStream(bytePath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+        BinaryFormatter bf = new BinaryFormatter();
+        bf.Serialize(fs1, config);
+        fs1.Close();
     }
 
     static void DeleteAB()
@@ -175,7 +240,7 @@ public class BundleEditor
     {
         for (int i = 0; i < strs.Length; i++)
         {
-            if (name==(strs[i]))
+            if (name == (strs[i]))
             {
                 return true;
             }
@@ -186,7 +251,23 @@ public class BundleEditor
     {
         for (int i = 0; i < m_AllFileAB.Count; i++)
         {
-            if (path == m_AllFileAB[i] || path.Contains(m_AllFileAB[i]))
+            if (path == m_AllFileAB[i] || (path.Contains(m_AllFileAB[i]) && (path.Replace(m_AllFileAB[i], "")[0] == '/')))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    /// <summary>
+    /// 是否是有效路径 
+    /// </summary>
+    /// <param name="path"></param>
+    /// <returns></returns>
+    static bool ValidPath(string path)
+    {
+        for (int i = 0; i < m_ConfigFil.Count; i++)
+        {
+            if (path.Contains(m_ConfigFil[i]))
             {
                 return true;
             }

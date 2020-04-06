@@ -8,13 +8,42 @@ using System.Runtime.Serialization.Formatters.Binary;
 public class ResourceTest : MonoBehaviour
 {
 
-    //void Start()
-    //{
+    void Start()
+    {
+        TestLoad();
     //    AssetBundle assetbudle = AssetBundle.LoadFromFile(Application.streamingAssetsPath + "/character.model");
     //    GameObject obj = GameObject.Instantiate(assetbudle.LoadAsset<GameObject>("Attack"));
     //    ReadTestAssets();
-    //}
+    }
 
+
+    void TestLoad()
+    {
+        AssetBundle assetBundleconfig = AssetBundle.LoadFromFile(Application.streamingAssetsPath + "/assetbundleconfig");
+        TextAsset textAsset = assetBundleconfig.LoadAsset<TextAsset>("AssetBundleConfig");
+        MemoryStream stream = new MemoryStream(textAsset.bytes);
+        BinaryFormatter bf = new BinaryFormatter();
+        AssetBundleConfig testserilize = (AssetBundleConfig)bf.Deserialize(stream);
+        stream.Close();
+        string path = "Assets/Prefabs/Attack.prefab";
+        string crc = CRC32.GetCRC32(path).ToString();
+        ABBase abbase = null;
+
+        for (int i = 0; i < testserilize.ABList.Count; i++)
+        {
+            if (testserilize.ABList[i].Crc == crc)
+            {
+                abbase = testserilize.ABList[i];
+            }
+        }
+        for (int i = 0; i < abbase.ABDependce.Count; i++)
+        {
+            AssetBundle.LoadFromFile(Application.streamingAssetsPath + "/" + abbase.ABDependce[i]);
+
+        }
+        AssetBundle assetbundle = AssetBundle.LoadFromFile(Application.streamingAssetsPath + "/"+abbase.ABName);
+        GameObject obj = GameObject.Instantiate(assetbundle.LoadAsset<GameObject>(abbase.AssetName));
+    }
     //void ReadTestAssets()
     //{
     //    AssetsSerilize ass= UnityEditor.AssetDatabase.LoadAssetAtPath<AssetsSerilize>("Assets/TestAssets.asset");
